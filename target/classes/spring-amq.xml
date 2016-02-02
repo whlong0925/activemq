@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans 
+    http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+    http://www.springframework.org/schema/context
+    http://www.springframework.org/schema/context/spring-context-3.1.xsd">
+
+	<bean
+		class="org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor" />
+	<!-- 配置扫描路径 -->
+	<context:component-scan base-package="com.sinmo">
+		<!-- 只扫描Service，也可以添加Repostory，但是要把Controller排除在外，Controller由spring-mvc.xml去加载 -->
+		<!-- <context:include-filter type="annotation" expression="org.springframework.stereotype.Service" 
+			/> -->
+		<!-- <context:include-filter type="annotation" expression="org.springframework.stereotype.Repository" 
+			/> -->
+		<!-- <context:include-filter type="annotation" expression="org.springframework.stereotype.Component" 
+			/> -->
+		<context:exclude-filter type="annotation"
+			expression="org.springframework.stereotype.Controller" />
+	</context:component-scan>
+	<!-- 连接池 -->
+	<bean id="pooledConnectionFactory" class="org.apache.activemq.pool.PooledConnectionFactory"
+		destroy-method="stop">
+		<property name="connectionFactory">
+			<bean class="org.apache.activemq.ActiveMQConnectionFactory">
+				<property name="brokerURL" value="tcp://localhost:61616" />
+			</bean>
+		</property>
+	</bean>
+
+
+	<!-- 配置消息目标 -->
+	<!-- 目标，在ActiveMQ管理员控制台创建 http://localhost:8161/admin/queues.jsp -->
+	<bean id="queueDestination" class="org.apache.activemq.command.ActiveMQQueue">
+		<constructor-arg index="0" value="sinmo.mq.queue" />
+	</bean>
+	<bean id="topicDestination" class="org.apache.activemq.command.ActiveMQTopic">
+		<constructor-arg index="0" value="sinmo.mq.topic" />
+	</bean>
+
+	<!-- 消息模板 -->
+	<bean id="jmsQueueTemplate" class="org.springframework.jms.core.JmsTemplate">
+		<property name="connectionFactory" ref="pooledConnectionFactory" />
+		<property name="defaultDestination" ref="queueDestination" />
+		<property name="messageConverter">
+			<bean
+				class="org.springframework.jms.support.converter.SimpleMessageConverter" />
+		</property>
+	</bean>
+	<bean id="jmsTopicTemplate" class="org.springframework.jms.core.JmsTemplate">
+		<property name="connectionFactory" ref="pooledConnectionFactory" />
+		<property name="defaultDestination" ref="topicDestination" />
+		<property name="messageConverter">
+			<bean
+				class="org.springframework.jms.support.converter.SimpleMessageConverter" />
+		</property>
+	</bean>
+	<!-- 消费监听 -->
+	<bean id="queueConsumerListener" class="com.sinmo.mq.consumer.QueueConsumerListener" />
+	<bean id="topicConsumerListener" class="com.sinmo.mq.consumer.TopicConsumerListener" />
+
+	<!-- 定义Queue监听器 -->
+	<bean id="jmsQueueContainer"
+		class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+		<property name="connectionFactory" ref="pooledConnectionFactory" />
+		<property name="destination" ref="queueDestination" />
+		<property name="messageListener" ref="queueConsumerListener" />
+		<!-- 控制本地事务 -->
+		<property name="sessionTransacted" value="true" />
+		<!-- 初始5个Consumer, 可动态扩展到10 -->
+        <property name="concurrentConsumers" value="10" />
+	</bean>
+
+	<!-- 定义Topic监听器 -->
+	<bean id="jmsTopicContainer"
+		class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+		<property name="connectionFactory" ref="pooledConnectionFactory" />
+		<property name="destination" ref="topicDestination" />
+		<property name="messageListener" ref="topicConsumerListener" />
+		<!-- 控制本地事务 -->
+		<property name="sessionTransacted" value="true" />
+	</bean>
+</beans>
